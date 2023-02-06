@@ -1,26 +1,35 @@
-from flask import Flask, request, jsonify, make_response
-from flask_cors import CORS
-import ssl
+
+from flask import Flask, request
+from flask_cors import CORS, cross_origin
+import json
 
 app = Flask(__name__)
 CORS(app)
 
-@app.route("/login", methods=["POST"])
+@app.route('/', methods = ['GET', 'POST'])
+def hello():
+    return "Hello World!"
+
+@app.after_request
+def after_request(response):
+    header = response.headers
+    header['Access-Control-Allow-Origin'] = '*'
+    header['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    header['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    return response
+
+def handle_request(data):
+    if data.get("username") == "test" and data.get("password") == "test":
+        return {"success": True}
+    else: return {"success": False}
+
+@app.route('/login', methods=['GET', 'POST'])
+@cross_origin()
 def handle_login():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
+    if request.method == 'POST':
+        response = handle_request(request.get_json())
+    elif request.method == 'GET':
+        response = handle_request(request.form)
+    return json.dumps(response)
 
-    if username == "test" and password == "test":
-        response = {"success": True}
-    else:
-        response = {"success": False}
-
-    resp = make_response(jsonify(response))
-    resp.headers["Access-Control-Allow-Origin"] = "http://127.0.0.1:5500"
-    return resp
-
-if __name__ == "__main__":
-    # context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-    # context.load_cert_chain('cert.pem', 'key.pem')
-    app.run(host="127.0.0.1", port=5550)
+app.run()
