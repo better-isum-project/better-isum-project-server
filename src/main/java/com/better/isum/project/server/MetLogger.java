@@ -7,13 +7,13 @@ import java.util.logging.SimpleFormatter;
 import java.util.logging.LogRecord;
 
 import javax.swing.JFrame;
+import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 import javax.swing.WindowConstants;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyledDocument;
-import java.awt.BorderLayout;
-
+import java.awt.Dimension;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Map;
@@ -73,16 +73,21 @@ public class MetLogger {
         private StyledDocument consoleDoc;
 
         private LiveConsole() {
-            JFrame frame = new JFrame();
+            JFrame frame = new JFrame("ISUM Console");
             frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
             frame.setSize(800, 600);
             frame.setLocationRelativeTo(null);
 
             JTextPane textPane = new JTextPane();
             textPane.setEditable(false);
+            textPane.setSize(800, 600);
             consoleDoc = textPane.getStyledDocument();
 
-            frame.add(textPane, BorderLayout.CENTER);
+            JScrollPane scroll = new JScrollPane(textPane);
+            scroll.setPreferredSize(new Dimension(800, 600));
+
+            frame.add(scroll);
+            frame.pack();
             frame.setVisible(true);
         }
 

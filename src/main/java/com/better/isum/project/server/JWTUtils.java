@@ -2,24 +2,17 @@ package com.better.isum.project.server;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Level;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+
+import javax.crypto.spec.SecretKeySpec;
+
 import java.security.Key;
-import java.security.KeyFactory;
-import java.security.KeyPair;
 import java.security.Security;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -34,39 +27,36 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class JWTUtils {
     private static JWTUtils instance = null;
-    private KeyPair keyPair;
+    private Key key;
 
     final MetLogger LOGGER = MetLogger.getInstance();
 
     private JWTUtils() {
-        try {
-            Security.addProvider(new BouncyCastleProvider());
-            KeyFactory keyFactory = KeyFactory.getInstance("ECDSA", "BC");
+        // try {
+        Security.addProvider(new BouncyCastleProvider());
 
-            Path path = Paths.get("better-isum-project-server/src/main/resources/", "private_key.pem");
-            LOGGER.LogMessage(path.toAbsolutePath().toString(), Level.CONFIG);
+        String secretString = "ABCD";
+        byte[] secretBytes = Base64.getDecoder().decode(secretString);
+        key = new SecretKeySpec(secretBytes, "HS512");
 
-            byte[] privateKeyBytes = Files.readAllBytes(
-                    Paths.get("better-isum-project-server/src/main/resources/", "private_key.pem"));
-            PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
-            byte[] publicKeyBytes = Files.readAllBytes(
-                    Paths.get("better-isum-project-server/src/main/resources/", "public_key.pem"));
-            X509EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(publicKeyBytes);
-
-            keyPair = new KeyPair(keyFactory.generatePublic(publicKeySpec), keyFactory.generatePrivate(privateKeySpec));
-        } catch (NoSuchAlgorithmException e) {
-            LOGGER.LogMessage(
-                    String.format("Jwt keys not loaded [NoSuchAlgorithmException]: ", e.getMessage()), Level.SEVERE);
-        } catch (NoSuchProviderException e) {
-            LOGGER.LogMessage(
-                    String.format("Jwt keys not loaded [NoSuchProviderException]: ", e.getMessage()), Level.SEVERE);
-        } catch (IOException e) {
-            LOGGER.LogMessage(
-                    String.format("Jwt keys not loaded [IOException]: ", e.getMessage()), Level.SEVERE);
-        } catch (InvalidKeySpecException e) {
-            LOGGER.LogMessage(
-                    String.format("Jwt keys not loaded [InvalidKeySpecException]: ", e.getMessage()), Level.SEVERE);
-        }
+        // } catch (NoSuchAlgorithmException e) {
+        // LOGGER.LogMessage(
+        // String.format("Jwt keys not loaded [NoSuchAlgorithmException]: ",
+        // e.getMessage()), Level.SEVERE);
+        // } catch (NoSuchProviderException e) {
+        // LOGGER.LogMessage(
+        // String.format("Jwt keys not loaded [NoSuchProviderException]: ",
+        // e.getMessage()), Level.SEVERE);
+        // }
+        // catch (IOException e) {
+        // LOGGER.LogMessage(
+        // String.format("Jwt keys not loaded [IOException]: ", e.getMessage()),
+        // Level.SEVERE);
+        // } catch (InvalidKeySpecException e) {
+        // LOGGER.LogMessage(
+        // String.format("Jwt keys not loaded [InvalidKeySpecException]: ",
+        // e.getMessage()), Level.SEVERE);
+        // }
     }
 
     public static synchronized JWTUtils getInstance() {
@@ -76,15 +66,19 @@ public class JWTUtils {
         return instance;
     }
 
-    public final Key getPublicKey() {
-        return keyPair.getPublic();
+    // public final Key getPublicKey() {
+    // return keyPair.getPublic();
+    // }
+
+    // private final Key getPrivateKey() {
+    // return keyPair.getPublic();
+    // }
+
+    private final Key getSecret() {
+        return this.key;
     }
 
-    private final Key getPrivateKey() {
-        return keyPair.getPublic();
-    }
-
-    public String generateToken(Student user) {
+    public String generateToken(User user) {
         final long EXPIRATION_TIME_IN_MINUTES = 45;
         final Date EXPIRATION_TIME = Date.from(
                 LocalDateTime.now().plusMinutes(EXPIRATION_TIME_IN_MINUTES).atZone(ZoneId.systemDefault())
@@ -92,7 +86,7 @@ public class JWTUtils {
 
         Map<String, Object> header = new HashMap<>() {
             {
-                put("alg", "ES512");
+                put("alg", "HS512");
                 put("typ", "JWT");
             }
         };
@@ -101,9 +95,7 @@ public class JWTUtils {
                 "UUID", UUID.randomUUID().toString(),
                 "exp", EXPIRATION_TIME.getTime());
 
-        Key key = keyPair.getPrivate();
-
-        final SignatureAlgorithm SIGNATURE_ALGORITHM = SignatureAlgorithm.ES512;
+        final SignatureAlgorithm SIGNATURE_ALGORITHM = SignatureAlgorithm.HS512;
         return Jwts.builder()
                 .setHeader(header)
                 .addClaims(claims)
@@ -113,8 +105,9 @@ public class JWTUtils {
 
     public Map<String, String> validateToken(String token) {
         try {
+            token = token.substring(7);
             Jwts.parser()
-                    .setSigningKey(this.getPrivateKey())
+                    .setSigningKey(getSecret())
                     .parseClaimsJws(token);
 
             return Map.of(
@@ -124,23 +117,13 @@ public class JWTUtils {
             return Map.of(
                     "valid", "false",
                     "Error", "Token expired");
-        } catch (MalformedJwtException e) {
+        } catch (SignatureException | UnsupportedJwtException | PrematureJwtException | MalformedJwtException
+                | NullPointerException e) {
             return Map.of(
                     "valid", "false",
-                    "Error", "Bad token format");
-        } catch (PrematureJwtException e) {
-            return Map.of(
-                    "valid", "false",
-                    "Error", "Token not yet valid");
-        } catch (SignatureException e) {
-            return Map.of(
-                    "valid", "false",
-                    "Error", "Token signature invalid");
-        } catch (UnsupportedJwtException e) {
-            return Map.of(
-                    "valid", "false",
-                    "Error", "Token not supported");
+                    "Error", "Token invalid");
         } catch (Exception e) {
+            LOGGER.LogMessage(e.toString(), Level.WARNING);
             return Map.of(
                     "valid", "false",
                     "Error", e.toString());
